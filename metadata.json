@@ -1,0 +1,6 @@
+{
+  "name": "LogiCirc - Diseñador y Simulador de Circuitos Lógicos",
+  "description": "Aplicación interactiva CAD para crear, simular y exportar planos de circuitos electrónicos con DSL formal bidireccional, auto-posicionamiento, chips personalizados, colaboración y asistente IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
