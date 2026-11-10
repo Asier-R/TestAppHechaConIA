@@ -278,14 +278,12 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
     }
   };
 
-  // Pin Click or Drag for Wiring
-  const handlePinMouseDown = (
-    e: React.MouseEvent,
+  // Unified Pin Action for Click, Drag and Mobile Touch
+  const handlePinAction = (
     componentId: string,
     pinId: string,
     isInput: boolean
   ) => {
-    e.stopPropagation();
     if (isReadOnly) return;
 
     const comp = components.find((c) => c.id === componentId);
@@ -302,13 +300,24 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
       });
       setWiringCurrentPos(coords);
     } else if (wiringStart) {
-      // If we already started wiring and clicked an input pin: complete wire!
+      // Input pin: complete connection
       if (wiringStart.componentId !== componentId) {
         onAddWire(wiringStart.componentId, wiringStart.pinId, componentId, pinId);
       }
       setWiringStart(null);
       setWiringCurrentPos(null);
     }
+  };
+
+  // Pin Click or Drag for Wiring
+  const handlePinMouseDown = (
+    e: React.MouseEvent,
+    componentId: string,
+    pinId: string,
+    isInput: boolean
+  ) => {
+    e.stopPropagation();
+    handlePinAction(componentId, pinId, isInput);
   };
 
   const handlePinMouseUp = (
@@ -325,6 +334,117 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
       setWiringStart(null);
       setWiringCurrentPos(null);
     }
+  };
+
+  // Mobile Touch Pan, Pinch-to-Zoom & Dragging State
+  const [touchState, setTouchState] = useState<{
+    mode: 'none' | 'pan' | 'pinch' | 'drag';
+    startPan: { x: number; y: number };
+    startTouch: { x: number; y: number };
+    startPinchDist: number;
+    startZoom: number;
+    dragCompId?: string;
+    dragInitials?: Map<string, { x: number; y: number }>;
+  }>({
+    mode: 'none',
+    startPan: { x: 0, y: 0 },
+    startTouch: { x: 0, y: 0 },
+    startPinchDist: 0,
+    startZoom: 1,
+  });
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      setTouchState({
+        mode: 'pan',
+        startPan: { ...pan },
+        startTouch: { x: t.clientX, y: t.clientY },
+        startPinchDist: 0,
+        startZoom: zoom,
+      });
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
+      setTouchState((prev) => ({
+        ...prev,
+        mode: 'pinch',
+        startPinchDist: dist,
+        startZoom: zoom,
+      }));
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchState.mode === 'pan' && e.touches.length === 1) {
+      const t = e.touches[0];
+      const dx = t.clientX - touchState.startTouch.x;
+      const dy = t.clientY - touchState.startTouch.y;
+
+      if (touchState.dragCompId && touchState.dragInitials && !isReadOnly) {
+        // Dragging components with touch
+        const moves: Array<{ id: string; x: number; y: number }> = [];
+        touchState.dragInitials.forEach((initial, id) => {
+          const snappedX = Math.round((initial.x + dx / zoom) / 10) * 10;
+          const snappedY = Math.round((initial.y + dy / zoom) / 10) * 10;
+          moves.push({ id, x: snappedX, y: snappedY });
+        });
+        onMoveComponents(moves);
+      } else {
+        // Panning canvas with touch
+        setPan({
+          x: touchState.startPan.x + dx,
+          y: touchState.startPan.y + dy,
+        });
+      }
+    } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      );
+      if (touchState.startPinchDist > 0) {
+        const factor = dist / touchState.startPinchDist;
+        const newZoom = Math.min(Math.max(0.25, touchState.startZoom * factor), 3.0);
+        setZoom(newZoom);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchState((prev) => ({
+      ...prev,
+      mode: 'none',
+      dragCompId: undefined,
+      dragInitials: undefined,
+    }));
+  };
+
+  const handleComponentTouchStart = (e: React.TouchEvent, compId: string) => {
+    e.stopPropagation();
+    if (!selectedComponentIds.includes(compId)) {
+      onSelectComponent(compId, false);
+    }
+    if (isReadOnly || e.touches.length !== 1) return;
+
+    const t = e.touches[0];
+    const initials = new Map<string, { x: number; y: number }>();
+    const targets = selectedComponentIds.includes(compId) ? selectedComponentIds : [compId];
+    for (const id of targets) {
+      const c = components.find((comp) => comp.id === id);
+      if (c) initials.set(id, { x: c.x, y: c.y });
+    }
+
+    setTouchState({
+      mode: 'pan',
+      startPan: { ...pan },
+      startTouch: { x: t.clientX, y: t.clientY },
+      startPinchDist: 0,
+      startZoom: zoom,
+      dragCompId: compId,
+      dragInitials: initials,
+    });
   };
 
   // Component Drag Start
@@ -434,6 +554,9 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={`relative flex-1 h-full overflow-hidden select-none outline-none ${
@@ -450,8 +573,24 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
         </div>
       )}
 
-      {/* Canvas Controls HUD */}
-      <div className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5 bg-slate-900/80 backdrop-blur border border-slate-800 p-1 rounded-lg shadow-xl text-slate-200">
+      {/* In-Progress Wiring Banner (Especially helpful on mobile) */}
+      {wiringStart && (
+        <div className="absolute top-14 sm:top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-700/90 text-white font-medium text-xs px-3 py-1.5 rounded-full shadow-xl flex items-center gap-2 backdrop-blur animate-in fade-in">
+          <span>Cableando: toca un pin de entrada</span>
+          <button
+            onClick={() => {
+              setWiringStart(null);
+              setWiringCurrentPos(null);
+            }}
+            className="px-2 py-0.5 bg-black/40 hover:bg-black/60 rounded text-[11px] font-bold cursor-pointer"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* Canvas Controls HUD (Elevated on mobile to avoid overlapping bottom navigation bar) */}
+      <div className="absolute bottom-20 md:bottom-4 right-3 sm:right-4 z-20 flex items-center gap-1.5 bg-slate-900/80 backdrop-blur border border-slate-800 p-1 rounded-lg shadow-xl text-slate-200">
         <button
           onClick={() => setZoom((z) => Math.min(z + 0.15, 3))}
           className="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-white"
@@ -677,6 +816,7 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
                   comp.width / 2
                 }, ${comp.height / 2})`}
                 onMouseDown={(e) => handleComponentMouseDown(e, comp.id)}
+                onTouchStart={(e) => handleComponentTouchStart(e, comp.id)}
                 className="cursor-move group"
               >
                 {/* Component Body Box */}
@@ -769,6 +909,12 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
                           onToggleComponentState(comp.id, { isOn: !comp.state.isOn });
                         }
                       }}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation();
+                        if (!isReadOnly) {
+                          onToggleComponentState(comp.id, { isOn: !comp.state.isOn });
+                        }
+                      }}
                       className="cursor-pointer"
                     >
                       <rect
@@ -801,6 +947,14 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
                         e.stopPropagation();
                         if (!isReadOnly) onToggleComponentState(comp.id, { isPressed: false });
                       }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        if (!isReadOnly) onToggleComponentState(comp.id, { isPressed: true });
+                      }}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation();
+                        if (!isReadOnly) onToggleComponentState(comp.id, { isPressed: false });
+                      }}
                       className="cursor-pointer"
                     >
                       <circle
@@ -822,6 +976,13 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
                       onClick={(e) => {
                         e.stopPropagation();
                         // Cycle LED color on click
+                        const colors = ['#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6'];
+                        const curIdx = colors.indexOf(comp.state.color || '#10b981');
+                        const nextColor = colors[(curIdx + 1) % colors.length];
+                        onToggleComponentState(comp.id, { color: nextColor });
+                      }}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation();
                         const colors = ['#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6'];
                         const curIdx = colors.indexOf(comp.state.color || '#10b981');
                         const nextColor = colors[(curIdx + 1) % colors.length];
@@ -944,12 +1105,19 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
                       transform={`translate(0, ${relY})`}
                       onMouseDown={(e) => handlePinMouseDown(e, comp.id, pin.id, true)}
                       onMouseUp={(e) => handlePinMouseUp(e, comp.id, pin.id, true)}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation();
+                        handlePinAction(comp.id, pin.id, true);
+                      }}
                       onMouseEnter={() =>
                         setHoveredPin({ componentId: comp.id, pinId: pin.id, type: 'input' })
                       }
                       onMouseLeave={() => setHoveredPin(null)}
                       className="cursor-crosshair"
                     >
+                      {/* Invisible Larger Hit Area for Finger Touch Targets (>= 32px hitbox) */}
+                      <circle cx="0" cy="0" r="16" fill="transparent" pointerEvents="all" />
+
                       {/* Warning ring for floating disconnected inputs */}
                       {isFloating && (
                         <circle
@@ -1000,12 +1168,19 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
                       transform={`translate(${comp.width}, ${relY})`}
                       onMouseDown={(e) => handlePinMouseDown(e, comp.id, pin.id, false)}
                       onMouseUp={(e) => handlePinMouseUp(e, comp.id, pin.id, false)}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation();
+                        handlePinAction(comp.id, pin.id, false);
+                      }}
                       onMouseEnter={() =>
                         setHoveredPin({ componentId: comp.id, pinId: pin.id, type: 'output' })
                       }
                       onMouseLeave={() => setHoveredPin(null)}
                       className="cursor-crosshair"
                     >
+                      {/* Invisible Larger Hit Area for Finger Touch Targets (>= 32px hitbox) */}
+                      <circle cx="0" cy="0" r="16" fill="transparent" pointerEvents="all" />
+
                       {/* Connection Terminal Circle */}
                       <circle
                         cx="0"

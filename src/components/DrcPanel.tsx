@@ -45,7 +45,7 @@ export const DrcPanel: React.FC<DrcPanelProps> = ({
 
   return (
     <div
-      className="w-96 md:w-[440px] bg-slate-900 border-l border-slate-800 text-slate-100 flex flex-col h-full z-20 shadow-2xl animate-in slide-in-from-right duration-200"
+      className="fixed inset-0 md:relative md:inset-auto w-full md:w-[440px] bg-slate-900 border-l border-slate-800 text-slate-100 flex flex-col h-full z-50 md:z-20 shadow-2xl animate-in slide-in-from-right duration-200"
       aria-label="Inspector de Reglas de Diseño DRC"
     >
       {/* Header */}

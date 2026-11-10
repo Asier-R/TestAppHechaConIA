@@ -133,28 +133,34 @@ export const CollaborationModal: React.FC<CollaborationModalProps> = ({
               </span>
             </div>
             <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
-              {collaborators.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-slate-950/60 border border-slate-800/80"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-[10px]"
-                      style={{ backgroundColor: user.color }}
-                    >
-                      {user.name.slice(0, 2).toUpperCase()}
+              {collaborators.length === 0 ? (
+                <div className="p-3 text-center rounded-lg bg-slate-950/40 border border-dashed border-slate-800 text-[11px] text-slate-500">
+                  No hay otros participantes conectados en esta sala. Comparte el enlace para colaborar en tiempo real.
+                </div>
+              ) : (
+                collaborators.map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex items-center justify-between p-2 rounded-lg bg-slate-950/60 border border-slate-800/80"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-[10px]"
+                        style={{ backgroundColor: user.color }}
+                      >
+                        {user.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-medium text-slate-200">
+                        {user.name} {user.id === currentUser.id && '(Tú)'}
+                      </span>
                     </div>
-                    <span className="text-xs font-medium text-slate-200">
-                      {user.name} {user.id === currentUser.id && '(Tú)'}
+
+                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 capitalize">
+                      {user.role}
                     </span>
                   </div>
-
-                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 capitalize">
-                    {user.role}
-                  </span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 

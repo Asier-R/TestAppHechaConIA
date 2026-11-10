@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Network,
+  Menu,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -65,6 +66,7 @@ interface ToolbarProps {
   isDrcPanelOpen?: boolean;
   onToggleDrcPanel?: () => void;
   onOpenUmlModal?: () => void;
+  onOpenMobileMenu?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -101,6 +103,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isDrcPanelOpen = false,
   onToggleDrcPanel,
   onOpenUmlModal,
+  onOpenMobileMenu,
 }) => {
   const [showPresetsMenu, setShowPresetsMenu] = useState(false);
 
@@ -108,14 +111,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const warningCount = drcReport?.violations.filter((v) => v.severity === 'warning').length || 0;
 
   return (
-    <header className="h-14 bg-slate-900 border-b border-slate-800 text-slate-100 flex items-center justify-between px-3 select-none gap-2 z-30">
+    <header className="h-14 bg-slate-900 border-b border-slate-800 text-slate-100 flex items-center justify-between px-2.5 sm:px-3 select-none gap-1.5 sm:gap-2 z-30">
       {/* Brand & Project Name */}
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-mono font-bold text-sm">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-tr from-emerald-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-mono font-bold text-xs sm:text-sm">
             LC
           </div>
-          <span className="font-bold text-sm tracking-tight text-white hidden sm:inline">
+          <span className="font-bold text-xs sm:text-sm tracking-tight text-white hidden sm:inline">
             Logi<span className="text-emerald-400">Circ</span>
           </span>
         </div>
@@ -127,19 +130,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           value={projectName}
           onChange={(e) => onUpdateProjectName(e.target.value)}
           aria-label="Nombre del proyecto"
-          className="bg-transparent hover:bg-slate-800/60 focus:bg-slate-950 border border-transparent focus:border-slate-700 rounded px-2 py-1 text-xs font-semibold text-slate-200 focus:outline-none max-w-[180px] sm:max-w-[220px] truncate"
+          className="bg-transparent hover:bg-slate-800/60 focus:bg-slate-950 border border-transparent focus:border-slate-700 rounded px-1.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none max-w-[105px] sm:max-w-[180px] md:max-w-[220px] truncate"
           title="Haz clic para renombrar el plano"
         />
 
         {/* Preset Circuits Dropdown */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setShowPresetsMenu((prev) => !prev)}
             className="flex items-center gap-1 text-xs px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition cursor-pointer"
             aria-label="Ejemplos predefinidos"
           >
             <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden md:inline">Ejemplos</span>
+            <span className="hidden sm:inline">Ejemplos</span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
@@ -166,8 +169,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </div>
       </div>
 
-      {/* Middle: Simulation Controls & Auto Layout */}
-      <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800/80 p-1 rounded-xl">
+      {/* Middle: Simulation Controls & Auto Layout (Desktop Only) */}
+      <div className="hidden md:flex items-center gap-1.5 bg-slate-950/80 border border-slate-800/80 p-1 rounded-xl">
         {/* Play / Pause Toggle */}
         <button
           onClick={onToggleSimulation}
@@ -269,8 +272,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </button>
       </div>
 
-      {/* Right Side: File, Export, Features & AI */}
-      <div className="flex items-center gap-1.5">
+      {/* Right Side: File, Export, Features & AI (Desktop Only) */}
+      <div className="hidden md:flex items-center gap-1.5">
         {/* Save & Import */}
         <button
           onClick={onSaveProject}
@@ -401,6 +404,56 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           {isDarkMode ? <Sun className="w-4 h-4 text-amber-300" /> : <Moon className="w-4 h-4 text-slate-700" />}
         </button>
+      </div>
+
+      {/* Mobile Top Bar Controls */}
+      <div className="flex md:hidden items-center gap-1.5 shrink-0">
+        {/* DRC Quick Badge on Mobile */}
+        <button
+          onClick={onToggleDrcPanel}
+          className={`px-2 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
+            errorCount > 0
+              ? 'bg-rose-950/80 text-rose-300 border-rose-600 shadow-sm shadow-rose-900/40 animate-pulse'
+              : warningCount > 0
+              ? 'bg-amber-950/80 text-amber-300 border-amber-600'
+              : 'bg-slate-800 text-emerald-400 border-slate-700'
+          }`}
+          aria-label="DRC"
+          title="Reglas DRC"
+        >
+          {errorCount > 0 ? (
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+          ) : warningCount > 0 ? (
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+          ) : (
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          )}
+          <span className="text-[11px] font-mono">
+            {errorCount > 0 ? `${errorCount}` : warningCount > 0 ? `${warningCount}` : 'OK'}
+          </span>
+        </button>
+
+        {/* Quick Auto Layout button on mobile */}
+        <button
+          onClick={onAutoLayout}
+          className="p-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-cyan-400 rounded-lg transition"
+          title="Auto Organizar Plano"
+          aria-label="Auto Organizar"
+        >
+          <LayoutGrid className="w-4 h-4" />
+        </button>
+
+        {/* Mobile Menu Button */}
+        {onOpenMobileMenu && (
+          <button
+            onClick={onOpenMobileMenu}
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 rounded-lg transition"
+            title="Menú y Herramientas"
+            aria-label="Abrir menú móvil"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </header>
   );

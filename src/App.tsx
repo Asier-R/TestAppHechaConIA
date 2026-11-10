@@ -35,6 +35,8 @@ import { OscilloscopePanel } from './components/OscilloscopePanel';
 import { AiAssistantDrawer } from './components/AiAssistantDrawer';
 import { DrcPanel } from './components/DrcPanel';
 import { UmlViewerModal } from './components/UmlViewerModal';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { MobileMenuModal } from './components/MobileMenuModal';
 
 export default function App() {
   // Initialize with Full Adder preset or saved project
@@ -75,24 +77,7 @@ export default function App() {
 
   // Collaboration Room
   const [roomId, setRoomId] = useState('CIRCUIT-74LS');
-  const [collaborators, setCollaborators] = useState<CollaboratorUser[]>([
-    {
-      id: 'usr_peer_1',
-      name: 'Elena R.',
-      color: '#8b5cf6',
-      role: 'editor',
-      cursor: { x: 580, y: 220 },
-      lastActive: new Date().toISOString(),
-    },
-    {
-      id: 'usr_peer_2',
-      name: 'Carlos M.',
-      color: '#3b82f6',
-      role: 'viewer',
-      cursor: { x: 320, y: 380 },
-      lastActive: new Date().toISOString(),
-    },
-  ]);
+  const [collaborators, setCollaborators] = useState<CollaboratorUser[]>([]);
 
   // Modal & Drawer States
   const [isDslPanelOpen, setIsDslPanelOpen] = useState(false);
@@ -105,6 +90,8 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isDrcPanelOpen, setIsDrcPanelOpen] = useState(false);
   const [isUmlModalOpen, setIsUmlModalOpen] = useState(false);
+  const [isComponentDrawerOpen, setIsComponentDrawerOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Real-Time Design Rule Check (DRC) validation report
   const drcReport = useMemo(() => {
@@ -579,6 +566,7 @@ export default function App() {
         isDrcPanelOpen={isDrcPanelOpen}
         onToggleDrcPanel={() => setIsDrcPanelOpen((prev) => !prev)}
         onOpenUmlModal={() => setIsUmlModalOpen(true)}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
       />
 
       {/* Main Workspace Area (Left Palette + Center Canvas + Right Drawers) */}
@@ -586,11 +574,13 @@ export default function App() {
         {/* Left Component Drawer */}
         <ComponentDrawer
           onSelectComponent={(type, customDef) => {
-            handleDropNewComponent(type, 300, 200, customDef?.id);
+            handleDropNewComponent(type, 260, 180, customDef?.id);
           }}
           customComponents={schematic.customComponents || []}
           onOpenCustomModal={() => setIsCustomModalOpen(true)}
           isReadOnly={userRole === 'viewer'}
+          isOpenOnMobile={isComponentDrawerOpen}
+          onCloseMobile={() => setIsComponentDrawerOpen(false)}
         />
 
         {/* Center Canvas Area + Oscilloscope */}
@@ -706,6 +696,56 @@ export default function App() {
       <UmlViewerModal
         isOpen={isUmlModalOpen}
         onClose={() => setIsUmlModalOpen(false)}
+      />
+
+      {/* Mobile Bottom Navigation Bar (Thumb-First Ergonomics) */}
+      <MobileBottomNav
+        onOpenComponentDrawer={() => setIsComponentDrawerOpen((prev) => !prev)}
+        isComponentDrawerOpen={isComponentDrawerOpen}
+        isSimulating={isSimulating}
+        onToggleSimulation={() => setIsSimulating((prev) => !prev)}
+        onStepSimulation={() => runSimulationStep(true)}
+        drcReport={drcReport}
+        onToggleDrcPanel={() => setIsDrcPanelOpen((prev) => !prev)}
+        isDrcPanelOpen={isDrcPanelOpen}
+        isOscilloscopeOpen={isOscilloscopeOpen}
+        onToggleOscilloscope={() => setIsOscilloscopeOpen((prev) => !prev)}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+        isMobileMenuOpen={isMobileMenuOpen}
+      />
+
+      {/* Mobile Tools & Features Sheet Modal */}
+      <MobileMenuModal
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        onLoadPreset={handleLoadPreset}
+        onAutoLayout={handleAutoLayout}
+        onSaveProject={handleSaveProject}
+        onImportClick={handleImportClick}
+        onOpenExportModal={() => setIsExportModalOpen(true)}
+        onOpenVersionModal={() => setIsVersionModalOpen(true)}
+        onOpenCollabModal={() => setIsCollabModalOpen(true)}
+        onOpenGithubModal={() => setIsGithubModalOpen(true)}
+        onOpenDslPanel={() => setIsDslPanelOpen(true)}
+        onOpenUmlModal={() => setIsUmlModalOpen(true)}
+        onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
+        onResetSimulation={() => {
+          setSchematic((prev) => ({
+            ...prev,
+            components: prev.components.map((c) => ({
+              ...c,
+              state: { ...c.state, isOn: false, isPressed: false, storedValue: 0 },
+            })),
+          }));
+          setTimeout(() => runSimulationStep(false), 20);
+        }}
+        simulationSpeed={simulationSpeed}
+        onChangeSimulationSpeed={setSimulationSpeed}
+        activeBranch={schematic.activeBranch || 'main'}
+        commitsCount={schematic.commits?.length || 1}
+        collaboratorsCount={collaborators.length + 1}
       />
     </div>
   );

@@ -38,7 +38,7 @@ export const OscilloscopePanel: React.FC<OscilloscopePanelProps> = ({
 
   return (
     <div
-      className="h-44 bg-slate-900 border-t border-slate-800 text-slate-100 flex flex-col select-none z-20 shadow-2xl animate-in slide-in-from-bottom duration-150"
+      className="h-44 bg-slate-900 border-t border-slate-800 text-slate-100 flex flex-col select-none z-20 shadow-2xl mb-16 md:mb-0 animate-in slide-in-from-bottom duration-150"
       aria-label="Analizador Lógico de Formas de Onda"
     >
       {/* Header */}

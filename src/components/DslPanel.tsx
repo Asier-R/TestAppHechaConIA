@@ -84,7 +84,7 @@ export const DslPanel: React.FC<DslPanelProps> = ({
 
   return (
     <div
-      className="w-96 md:w-[480px] bg-slate-900 border-l border-slate-800 text-slate-100 flex flex-col h-full z-20 shadow-2xl animate-in slide-in-from-right duration-200"
+      className="fixed inset-0 md:relative md:inset-auto w-full md:w-[480px] bg-slate-900 border-l border-slate-800 text-slate-100 flex flex-col h-full z-50 md:z-20 shadow-2xl animate-in slide-in-from-right duration-200"
       aria-label="Editor de Lenguaje Formal"
     >
       {/* Header */}
