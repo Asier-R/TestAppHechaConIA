@@ -79,6 +79,7 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
   const [pan, setPan] = useState({ x: 50, y: 50 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
 
   // Dragging components
   const [isDraggingComponents, setIsDraggingComponents] = useState(false);
@@ -121,15 +122,17 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
     [pan, zoom]
   );
 
-  // Handle Zoom with Mouse Wheel
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.min(Math.max(0.2, zoom * zoomFactor), 3.0);
+  // Handle Zoom with Mouse Wheel (Non-passive listener to prevent scroll & console error)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-    // Zoom toward mouse pointer
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
+    const onWheelHandler = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newZoom = Math.min(Math.max(0.2, zoom * zoomFactor), 3.0);
+
+      const rect = el.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
@@ -138,8 +141,13 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
 
       setPan({ x: newPanX, y: newPanY });
       setZoom(newZoom);
-    }
-  };
+    };
+
+    el.addEventListener('wheel', onWheelHandler, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheelHandler);
+    };
+  }, [pan, zoom]);
 
   // Fit all elements on screen
   const handleFitToScreen = () => {
@@ -177,16 +185,101 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
     setPan({ x: newPanX, y: newPanY });
   };
 
+  // Listen for Spacebar to toggle pan mode (CAD standard)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        const activeTag = document.activeElement?.tagName.toLowerCase();
+        if (activeTag === 'input' || activeTag === 'textarea') return;
+        setIsSpacePressed(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Window-level mouse listeners during canvas panning
+  useEffect(() => {
+    if (!isPanning) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      setPan({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    };
+
+    const handleWindowMouseUp = (e: MouseEvent) => {
+      if (e.button === 0 || e.button === 1) {
+        setIsPanning(false);
+      }
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isPanning, panStart]);
+
+  // Window-level mouse listeners during component dragging
+  useEffect(() => {
+    if (!isDraggingComponents) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (isReadOnly) return;
+      const dx = (e.clientX - dragStartMouse.x) / zoom;
+      const dy = (e.clientY - dragStartMouse.y) / zoom;
+
+      const moves: Array<{ id: string; x: number; y: number }> = [];
+      const grid = 20;
+
+      for (const [id, initial] of dragInitialPositions.entries()) {
+        const rawX = initial.x + dx;
+        const rawY = initial.y + dy;
+        const snappedX = Math.round(rawX / grid) * grid;
+        const snappedY = Math.round(rawY / grid) * grid;
+        moves.push({ id, x: snappedX, y: snappedY });
+      }
+
+      onMoveComponents(moves);
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsDraggingComponents(false);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isDraggingComponents, dragStartMouse, zoom, dragInitialPositions, onMoveComponents, isReadOnly]);
+
   // Mouse Down on Background (Start panning or marquee selection)
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.target !== e.currentTarget && (e.target as HTMLElement).tagName !== 'svg') {
+    // If clicking directly on an interactive overlay/button, don't start pan
+    const target = e.target as HTMLElement | SVGElement | null;
+    if (target?.closest?.('button, input, select, textarea, [role="button"], [data-interactive="true"]')) {
       return;
     }
 
-    if (e.button === 1 || e.altKey || e.button === 0) {
-      // If clicking directly on empty canvas background
-      if (e.shiftKey) {
-        // Start marquee selection
+    if (e.button === 1 || e.altKey || isSpacePressed || e.button === 0) {
+      // If Shift + Left click on empty background, start marquee selection box
+      if (e.shiftKey && e.button === 0 && !isSpacePressed) {
         const pos = screenToCanvas(e.clientX, e.clientY);
         setSelectionBox({
           startX: pos.x,
@@ -198,8 +291,11 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
         // Start Canvas Pan
         setIsPanning(true);
         setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-        onSelectComponent('', false);
-        onSelectWire(null);
+        // Deselect elements unless holding Spacebar or using Middle-click
+        if (e.button === 0 && !isSpacePressed) {
+          onSelectComponent('', false);
+          onSelectWire(null);
+        }
       }
     }
   };
@@ -550,7 +646,6 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -562,20 +657,26 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
       className={`relative flex-1 h-full overflow-hidden select-none outline-none ${
         isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
       }`}
-      style={{ cursor: isPanning ? 'grabbing' : wiringStart ? 'crosshair' : 'default' }}
+      style={{ cursor: isPanning ? 'grabbing' : isSpacePressed ? 'grab' : wiringStart ? 'crosshair' : 'default' }}
       tabIndex={0}
       data-testid="circuit-canvas"
     >
       {/* Read-Only Banner */}
       {isReadOnly && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-semibold text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 backdrop-blur">
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-semibold text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 backdrop-blur"
+        >
           <span>Modo Solo Lectura (Visor) - Las modificaciones están bloqueadas</span>
         </div>
       )}
 
       {/* In-Progress Wiring Banner (Especially helpful on mobile) */}
       {wiringStart && (
-        <div className="absolute top-14 sm:top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-700/90 text-white font-medium text-xs px-3 py-1.5 rounded-full shadow-xl flex items-center gap-2 backdrop-blur animate-in fade-in">
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute top-14 sm:top-4 left-1/2 -translate-x-1/2 z-30 bg-emerald-700/90 text-white font-medium text-xs px-3 py-1.5 rounded-full shadow-xl flex items-center gap-2 backdrop-blur animate-in fade-in"
+        >
           <span>Cableando: toca un pin de entrada</span>
           <button
             onClick={() => {
@@ -590,7 +691,10 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
       )}
 
       {/* Canvas Controls HUD (Elevated on mobile to avoid overlapping bottom navigation bar) */}
-      <div className="absolute bottom-20 md:bottom-4 right-3 sm:right-4 z-20 flex items-center gap-1.5 bg-slate-900/80 backdrop-blur border border-slate-800 p-1 rounded-lg shadow-xl text-slate-200">
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        className="absolute bottom-20 md:bottom-4 right-3 sm:right-4 z-20 flex items-center gap-1.5 bg-slate-900/80 backdrop-blur border border-slate-800 p-1 rounded-lg shadow-xl text-slate-200"
+      >
         <button
           onClick={() => setZoom((z) => Math.min(z + 0.15, 3))}
           className="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-white"
@@ -623,7 +727,10 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
 
       {/* Floating Selected Components Actions Bar */}
       {selectedComponentIds.length > 0 && !isReadOnly && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-2">
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-2"
+        >
           <span className="text-xs text-slate-400 font-medium">
             {selectedComponentIds.length}{' '}
             {selectedComponentIds.length === 1 ? 'componente' : 'componentes'}
@@ -700,7 +807,13 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
         </defs>
 
         {/* Background Grid */}
-        <rect width="100%" height="100%" fill="url(#circuit-grid)" />
+        <rect
+          width="100%"
+          height="100%"
+          fill="url(#circuit-grid)"
+          data-canvas-background="true"
+          pointerEvents="all"
+        />
 
         {/* Transform Group for Pan & Zoom */}
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
@@ -735,6 +848,10 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
             return (
               <g
                 key={wire.id}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  onSelectWire(wire.id);
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectWire(wire.id);
@@ -903,6 +1020,9 @@ export const SchematicCanvas: React.FC<SchematicCanvasProps> = ({
                   {/* SWITCH */}
                   {comp.type === 'SWITCH' && (
                     <g
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!isReadOnly) {
